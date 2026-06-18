@@ -1,31 +1,50 @@
-# Change these first
-owner: upptime # Your GitHub organization or username, where this repository lives
-repo: upptime # The name of this repository
+owner: MirkoS85
+repo: mirsflr-status
 
 sites:
-  - name: Google
-    url: https://www.google.com
-  - name: Wikipedia
-    url: https://en.wikipedia.org
-  - name: Hacker News
-    url: https://news.ycombinator.com
-  - name: Test Broken Site
-    url: https://thissitedoesnotexist.koj.co
+  - name: MirSFlr Website
+    url: https://www.mirhollio.com/
+    maxResponseTime: 5000
+    expectedStatusCodes:
+      - 200
+    __dangerous__body_down_if_text_missing: "MirSFlr"
+
+  - name: Validator Node Health
+    url: https://node.mirhollio.com/flare/ext/health
+    maxResponseTime: 5000
+    expectedStatusCodes:
+      - 200
+    __dangerous__body_down_if_text_missing: '"healthy":true'
+
+  - name: FTSO Metrics Feed
+    url: https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3/ftso
+    maxResponseTime: 10000
+    expectedStatusCodes:
+      - 200
+    __dangerous__body_down_if_text_missing: '"last_24h"'
+
+  - name: Validator Metrics Feed
+    url: https://api.oracle-daemon.com/v1/flare/validators
+    maxResponseTime: 10000
+    expectedStatusCodes:
+      - 200
+    __dangerous__body_down_if_text_missing: "NodeID-8dNfgpspPNDrZD2ksKCRJoGe4Xqe6qVtz"
+
+  - name: Provider Registry
+    url: https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3
+    maxResponseTime: 10000
+    expectedStatusCodes:
+      - 200
+    __dangerous__body_down_if_text_missing: '"display_name":"MirSFlr"'
 
 status-website:
-  # Add your custom domain name, or remove the `cname` line if you don't have a domain
-  # Uncomment the `baseUrl` line if you don't have a custom domain and add your repo name there
-  cname: demo.upptime.js.org
-  # baseUrl: /your-repo-name
-  logoUrl: https://raw.githubusercontent.com/upptime/upptime.js.org/master/static/img/icon.svg
-  name: Upptime
-  introTitle: "**Upptime** is the open-source uptime monitor and status page, powered entirely by GitHub."
-  introMessage: This is a sample status page which uses **real-time** data from our [GitHub repository](https://github.com/upptime/upptime). No server required — just GitHub Actions, Issues, and Pages. [**Get your own for free**](https://github.com/upptime/upptime)
+  baseUrl: /mirsflr-status
+  logoUrl: https://raw.githubusercontent.com/MirkoS85/mirhollio-website/main/logo.png
+  name: MirSFlr Status
+  introTitle: "**MirSFlr infrastructure status**"
+  introMessage: Independent public checks for the MirSFlr website, validator node health, and external Flare data feeds. Detailed provider metrics remain available on the main dashboard.
   navbar:
     - title: Status
       href: /
-    - title: GitHub
-      href: https://github.com/$OWNER/$REPO
-
-# Upptime also supports notifications, assigning issues, and more
-# See https://upptime.js.org/docs/configuration
+    - title: MirSFlr
+      href: https://www.mirhollio.com/
