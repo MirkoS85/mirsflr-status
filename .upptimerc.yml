@@ -28,7 +28,6 @@ sites:
     maxResponseTime: 10000
     expectedStatusCodes:
       - 200
-    __dangerous__body_down_if_text_missing: "NodeID-8dNfgpspPNDrZD2ksKCRJoGe4Xqe6qVtz"
 
   - name: Provider Registry
     url: https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3
