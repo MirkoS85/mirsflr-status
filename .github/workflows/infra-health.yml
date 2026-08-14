@@ -1,0 +1,157 @@
+name: Infra Health CI
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-health
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check critical infra
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check MirSFlr critical endpoints
+        shell: bash
+        run: |
+          set -u
+
+          failures=0
+
+          fetch_url() {
+            curl --fail --silent --show-error --location \
+              --connect-timeout 8 \
+              --max-time 20 \
+              --retry 2 \
+              --retry-delay 3 \
+              "$1"
+          }
+
+          fail_check() {
+            local name="$1"
+            local message="$2"
+            echo "::error title=${name}::${message}"
+            failures=$((failures + 1))
+          }
+
+          warn_check() {
+            local name="$1"
+            local message="$2"
+            echo "::warning title=${name}::${message}"
+          }
+
+          check_contains() {
+            local name="$1"
+            local url="$2"
+            local needle="$3"
+            local body=""
+
+            echo "::group::${name}"
+            if ! body="$(fetch_url "$url")"; then
+              fail_check "$name" "HTTP request failed: ${url}"
+            elif ! grep -Fq "$needle" <<<"$body"; then
+              fail_check "$name" "Expected text was not found: ${needle}"
+            else
+              echo "OK: ${url}"
+            fi
+            echo "::endgroup::"
+          }
+
+          check_validator_health() {
+            local name="Validator Node Health"
+            local url="https://node.mirhollio.com/flare/ext/health"
+            local body=""
+
+            echo "::group::${name}"
+            if ! body="$(fetch_url "$url")"; then
+              fail_check "$name" "HTTP request failed: ${url}"
+            elif ! node - "$body" <<'NODE'
+          const body = process.argv[2];
+          const data = JSON.parse(body);
+          if (data.healthy !== true) {
+            throw new Error(`healthy is ${JSON.stringify(data.healthy)}`);
+          }
+          console.log("OK: validator reports healthy=true");
+          NODE
+            then
+              fail_check "$name" "Validator health JSON is not healthy=true"
+            fi
+            echo "::endgroup::"
+          }
+
+          check_watch_status() {
+            local name="Apple Watch Status Feed"
+            local url="https://www.mirhollio.com/data/watch-status.json"
+            local body=""
+
+            echo "::group::${name}"
+            if ! body="$(fetch_url "$url")"; then
+              fail_check "$name" "HTTP request failed: ${url}"
+            elif ! node - "$body" <<'NODE'
+          const body = process.argv[2];
+          const data = JSON.parse(body);
+          const errors = [];
+          const generatedMs = Date.parse(data.generatedAt);
+          const ageMinutes = (Date.now() - generatedMs) / 60000;
+
+          if (data.schema !== "mirsflr-watch-status/v1") {
+            errors.push(`unexpected schema: ${data.schema}`);
+          }
+          if (!Number.isFinite(ageMinutes)) {
+            errors.push("generatedAt is missing or invalid");
+          } else if (ageMinutes > 60) {
+            errors.push(`feed is stale: ${ageMinutes.toFixed(1)} minutes old`);
+          } else if (ageMinutes < -5) {
+            errors.push(`generatedAt is in the future: ${data.generatedAt}`);
+          } else if (ageMinutes > 20) {
+            console.log(`::warning title=Apple Watch Status Feed::feed is ${ageMinutes.toFixed(1)} minutes old`);
+          }
+          if (data.validator?.status !== "connected") {
+            errors.push(`validator status is ${JSON.stringify(data.validator?.status)}`);
+          }
+
+          if (errors.length) {
+            throw new Error(errors.join("; "));
+          }
+
+          console.log(`OK: feed age ${ageMinutes.toFixed(1)} min, validator connected`);
+          NODE
+            then
+              fail_check "$name" "watch-status.json is stale, malformed, or validator is not connected"
+            fi
+            echo "::endgroup::"
+          }
+
+          soft_http() {
+            local name="$1"
+            local url="$2"
+
+            echo "::group::${name}"
+            if fetch_url "$url" >/dev/null; then
+              echo "OK: ${url}"
+            else
+              warn_check "$name" "Non-blocking external feed check failed: ${url}"
+            fi
+            echo "::endgroup::"
+          }
+
+          check_contains "MirSFlr Website" "https://www.mirhollio.com/" "MirSFlr"
+          check_validator_health
+          check_watch_status
+
+          soft_http "Flare Systems Explorer Provider Registry" "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3"
+          soft_http "Oracle Daemon Validator Feed" "https://api.oracle-daemon.com/v1/flare/validators"
+
+          if [ "$failures" -gt 0 ]; then
+            echo "${failures} critical infra check(s) failed."
+            exit 1
+          fi
+
+          echo "All critical MirSFlr infra checks passed."
