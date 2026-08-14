@@ -288,6 +288,8 @@ jobs:
                 name: "Infra Health CI",
                 intervalMinutes: 15,
                 statusPath: STATUS_PATH,
+                rawUrl: "https://raw.githubusercontent.com/MirkoS85/mirsflr-status/master/api/infra-health/status.json",
+                pagesUrl: "https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json",
                 workflow: "https://github.com/MirkoS85/mirsflr-status/actions/workflows/infra-health.yml"
               },
               checks

@@ -19,9 +19,10 @@ You will see it in:
 
 The workflow also publishes a small machine-readable status file:
 
-- Public JSON: https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json
+- OPS JSON source: https://raw.githubusercontent.com/MirkoS85/mirsflr-status/master/api/infra-health/status.json
+- GitHub Pages mirror: https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json
 
-The OPS dashboard reads that JSON and shows it as a simple green/yellow/red infra panel.
+The OPS dashboard reads the raw JSON source because it updates faster. The GitHub Pages mirror is public too, but can lag briefly because of caching.
 
 ## Critical Checks
 
