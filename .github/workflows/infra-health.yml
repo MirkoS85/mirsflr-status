@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: infra-health
@@ -21,137 +21,285 @@ jobs:
       - name: Check MirSFlr critical endpoints
         shell: bash
         run: |
-          set -u
+          node <<'NODE'
+          const STATUS_PATH = "api/infra-health/status.json";
+          const CHECKS = {
+            website: {
+              id: "website",
+              label: "Website",
+              kind: "critical",
+              url: "https://www.mirhollio.com/"
+            },
+            validator: {
+              id: "validator-node",
+              label: "Validator node",
+              kind: "critical",
+              url: "https://node.mirhollio.com/flare/ext/health"
+            },
+            watch: {
+              id: "watch-feed",
+              label: "Watch feed",
+              kind: "critical",
+              url: "https://www.mirhollio.com/data/watch-status.json"
+            },
+            fse: {
+              id: "fse-registry",
+              label: "FSE registry",
+              kind: "external",
+              url: "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3"
+            },
+            oracle: {
+              id: "oracle-validators",
+              label: "Oracle validators",
+              kind: "external",
+              url: "https://api.oracle-daemon.com/v1/flare/validators"
+            }
+          };
 
-          failures=0
+          const checks = [];
 
-          fetch_url() {
-            curl --fail --silent --show-error --location \
-              --connect-timeout 8 \
-              --max-time 20 \
-              --retry 2 \
-              --retry-delay 3 \
-              "$1"
+          function annotation(level, title, message) {
+            const cleanTitle = String(title).replace(/[\r\n]/g, " ");
+            const cleanMessage = String(message).replace(/[\r\n]/g, " ");
+            console.log(`::${level} title=${cleanTitle}::${cleanMessage}`);
           }
 
-          fail_check() {
-            local name="$1"
-            local message="$2"
-            echo "::error title=${name}::${message}"
-            failures=$((failures + 1))
+          async function fetchWithTimeout(url, timeoutMs = 20_000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+              const response = await fetch(url, {
+                signal: controller.signal,
+                redirect: "follow",
+                headers: { "User-Agent": "mirsflr-infra-health/1.0" }
+              });
+              const text = await response.text();
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+              }
+              return { response, text };
+            } finally {
+              clearTimeout(timer);
+            }
           }
 
-          warn_check() {
-            local name="$1"
-            local message="$2"
-            echo "::warning title=${name}::${message}"
+          async function withRetries(fn, attempts = 3) {
+            let lastError;
+            for (let attempt = 1; attempt <= attempts; attempt += 1) {
+              try {
+                return await fn();
+              } catch (error) {
+                lastError = error;
+                if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, attempt * 2500));
+              }
+            }
+            throw lastError;
           }
 
-          check_contains() {
-            local name="$1"
-            local url="$2"
-            local needle="$3"
-            local body=""
-
-            echo "::group::${name}"
-            if ! body="$(fetch_url "$url")"; then
-              fail_check "$name" "HTTP request failed: ${url}"
-            elif ! grep -Fq "$needle" <<<"$body"; then
-              fail_check "$name" "Expected text was not found: ${needle}"
-            else
-              echo "OK: ${url}"
-            fi
-            echo "::endgroup::"
+          function addCheck(base, status, message, details = {}) {
+            const item = {
+              id: base.id,
+              label: base.label,
+              kind: base.kind,
+              status,
+              url: base.url,
+              message,
+              checkedAt: new Date().toISOString(),
+              ...details
+            };
+            checks.push(item);
+            const groupTitle = `${base.label}: ${status.toUpperCase()}`;
+            console.log(`::group::${groupTitle}`);
+            console.log(`${base.url}`);
+            console.log(message);
+            if (details.ageMinutes != null) console.log(`ageMinutes=${details.ageMinutes}`);
+            console.log("::endgroup::");
+            if (status === "down" && base.kind === "critical") annotation("error", base.label, message);
+            if (status === "warn") annotation("warning", base.label, message);
+            return item;
           }
 
-          check_validator_health() {
-            local name="Validator Node Health"
-            local url="https://node.mirhollio.com/flare/ext/health"
-            local body=""
-
-            echo "::group::${name}"
-            if ! body="$(fetch_url "$url")"; then
-              fail_check "$name" "HTTP request failed: ${url}"
-            elif ! node - "$body" <<'NODE'
-          const body = process.argv[2];
-          const data = JSON.parse(body);
-          if (data.healthy !== true) {
-            throw new Error(`healthy is ${JSON.stringify(data.healthy)}`);
+          async function checkWebsite() {
+            try {
+              const { text } = await withRetries(() => fetchWithTimeout(CHECKS.website.url));
+              if (!text.includes("MirSFlr")) {
+                return addCheck(CHECKS.website, "down", "Website loaded, but expected MirSFlr text was not found.");
+              }
+              return addCheck(CHECKS.website, "ok", "Website is reachable and contains the expected MirSFlr marker.");
+            } catch (error) {
+              return addCheck(CHECKS.website, "down", `Website request failed: ${error.message}`);
+            }
           }
-          console.log("OK: validator reports healthy=true");
+
+          async function checkValidatorNode() {
+            try {
+              const { text } = await withRetries(() => fetchWithTimeout(CHECKS.validator.url));
+              const data = JSON.parse(text);
+              if (data.healthy !== true) {
+                return addCheck(CHECKS.validator, "down", `Validator health returned healthy=${JSON.stringify(data.healthy)}.`);
+              }
+              const peerCount = Number(data?.checks?.network?.message?.connectedPeers);
+              const rawReach = Number(data?.checks?.P?.message?.networking?.percentConnected);
+              const reach = Number.isFinite(rawReach) && rawReach <= 1 ? rawReach * 100 : rawReach;
+              const parts = ["Validator reports healthy=true"];
+              if (Number.isFinite(peerCount)) parts.push(`${peerCount} peers`);
+              if (Number.isFinite(reach)) parts.push(`${reach.toFixed(1)}% validator reach`);
+              return addCheck(CHECKS.validator, "ok", `${parts.join(", ")}.`, {
+                peers: Number.isFinite(peerCount) ? peerCount : null,
+                validatorReachPct: Number.isFinite(reach) ? reach : null
+              });
+            } catch (error) {
+              return addCheck(CHECKS.validator, "down", `Validator health check failed: ${error.message}`);
+            }
+          }
+
+          async function checkWatchFeed() {
+            try {
+              const { text } = await withRetries(() => fetchWithTimeout(CHECKS.watch.url));
+              const data = JSON.parse(text);
+              const errors = [];
+              const generatedMs = Date.parse(data.generatedAt);
+              const ageMinutes = (Date.now() - generatedMs) / 60000;
+
+              if (data.schema !== "mirsflr-watch-status/v1") {
+                errors.push(`unexpected schema ${JSON.stringify(data.schema)}`);
+              }
+              if (!Number.isFinite(ageMinutes)) {
+                errors.push("generatedAt is missing or invalid");
+              } else if (ageMinutes > 60) {
+                errors.push(`feed is stale: ${ageMinutes.toFixed(1)} minutes old`);
+              } else if (ageMinutes < -5) {
+                errors.push(`generatedAt is in the future: ${data.generatedAt}`);
+              }
+              if (data.validator?.status !== "connected") {
+                errors.push(`validator status is ${JSON.stringify(data.validator?.status)}`);
+              }
+
+              if (errors.length) {
+                return addCheck(CHECKS.watch, "down", errors.join("; "), {
+                  generatedAt: data.generatedAt || null,
+                  ageMinutes: Number.isFinite(ageMinutes) ? Number(ageMinutes.toFixed(1)) : null
+                });
+              }
+
+              const status = ageMinutes > 20 ? "warn" : "ok";
+              return addCheck(CHECKS.watch, status, `Watch feed is ${ageMinutes.toFixed(1)} minutes old; validator is connected.`, {
+                generatedAt: data.generatedAt,
+                ageMinutes: Number(ageMinutes.toFixed(1)),
+                fdc: data.fdc || null,
+                ftso: data.ftso || null,
+                validator: data.validator || null
+              });
+            } catch (error) {
+              return addCheck(CHECKS.watch, "down", `Watch status feed failed: ${error.message}`);
+            }
+          }
+
+          async function softHttp(base) {
+            try {
+              await withRetries(() => fetchWithTimeout(base.url, 20_000), 2);
+              return addCheck(base, "ok", "External reference feed is reachable.");
+            } catch (error) {
+              return addCheck(base, "warn", `Non-critical external feed failed: ${error.message}`);
+            }
+          }
+
+          function overallStatus() {
+            const critical = checks.filter(item => item.kind === "critical");
+            if (critical.some(item => item.status === "down")) return "down";
+            if (checks.some(item => item.status === "warn")) return "warn";
+            return "ok";
+          }
+
+          function statusSummary(overall) {
+            if (overall === "down") {
+              const failed = checks.filter(item => item.kind === "critical" && item.status === "down");
+              return `${failed.length} critical MirSFlr check${failed.length === 1 ? "" : "s"} failed.`;
+            }
+            if (overall === "warn") {
+              const warned = checks.filter(item => item.status === "warn");
+              return `${warned.length} MirSFlr check${warned.length === 1 ? " needs" : "s need"} attention; critical infra is still up.`;
+            }
+            return "All critical MirSFlr infra checks passed.";
+          }
+
+          async function publishStatus(payload) {
+            const token = process.env.GITHUB_TOKEN;
+            const repo = process.env.GITHUB_REPOSITORY;
+            if (!token || !repo) {
+              console.log("Skipping publish outside GitHub Actions.");
+              return;
+            }
+
+            const apiUrl = `https://api.github.com/repos/${repo}/contents/${STATUS_PATH}`;
+            const headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "X-GitHub-Api-Version": "2022-11-28"
+            };
+            const branch = process.env.GITHUB_REF_NAME || "master";
+            let sha = null;
+
+            const existing = await fetch(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers });
+            if (existing.ok) {
+              const json = await existing.json();
+              sha = json.sha || null;
+            } else if (existing.status !== 404) {
+              throw new Error(`Could not read existing status JSON: HTTP ${existing.status}`);
+            }
+
+            const content = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8").toString("base64");
+            const response = await fetch(apiUrl, {
+              method: "PUT",
+              headers,
+              body: JSON.stringify({
+                message: "Update infra health status [skip ci]",
+                branch,
+                content,
+                sha
+              })
+            });
+            if (!response.ok) {
+              const body = await response.text();
+              throw new Error(`Could not publish status JSON: HTTP ${response.status} ${body.slice(0, 240)}`);
+            }
+            console.log(`Published ${STATUS_PATH}`);
+          }
+
+          (async () => {
+            await Promise.all([
+              checkWebsite(),
+              checkValidatorNode(),
+              checkWatchFeed(),
+              softHttp(CHECKS.fse),
+              softHttp(CHECKS.oracle)
+            ]);
+
+            const order = ["website", "validator-node", "watch-feed", "fse-registry", "oracle-validators"];
+            checks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+            const overall = overallStatus();
+            const payload = {
+              schema: "mirsflr-infra-health/v1",
+              generatedAt: new Date().toISOString(),
+              overall,
+              summary: statusSummary(overall),
+              monitor: {
+                name: "Infra Health CI",
+                intervalMinutes: 15,
+                statusPath: STATUS_PATH,
+                workflow: "https://github.com/MirkoS85/mirsflr-status/actions/workflows/infra-health.yml"
+              },
+              checks
+            };
+
+            await publishStatus(payload);
+            console.log(payload.summary);
+
+            if (overall === "down") process.exit(1);
+          })().catch(error => {
+            annotation("error", "Infra Health CI", error.message);
+            console.error(error);
+            process.exit(1);
+          });
           NODE
-            then
-              fail_check "$name" "Validator health JSON is not healthy=true"
-            fi
-            echo "::endgroup::"
-          }
-
-          check_watch_status() {
-            local name="Apple Watch Status Feed"
-            local url="https://www.mirhollio.com/data/watch-status.json"
-            local body=""
-
-            echo "::group::${name}"
-            if ! body="$(fetch_url "$url")"; then
-              fail_check "$name" "HTTP request failed: ${url}"
-            elif ! node - "$body" <<'NODE'
-          const body = process.argv[2];
-          const data = JSON.parse(body);
-          const errors = [];
-          const generatedMs = Date.parse(data.generatedAt);
-          const ageMinutes = (Date.now() - generatedMs) / 60000;
-
-          if (data.schema !== "mirsflr-watch-status/v1") {
-            errors.push(`unexpected schema: ${data.schema}`);
-          }
-          if (!Number.isFinite(ageMinutes)) {
-            errors.push("generatedAt is missing or invalid");
-          } else if (ageMinutes > 60) {
-            errors.push(`feed is stale: ${ageMinutes.toFixed(1)} minutes old`);
-          } else if (ageMinutes < -5) {
-            errors.push(`generatedAt is in the future: ${data.generatedAt}`);
-          } else if (ageMinutes > 20) {
-            console.log(`::warning title=Apple Watch Status Feed::feed is ${ageMinutes.toFixed(1)} minutes old`);
-          }
-          if (data.validator?.status !== "connected") {
-            errors.push(`validator status is ${JSON.stringify(data.validator?.status)}`);
-          }
-
-          if (errors.length) {
-            throw new Error(errors.join("; "));
-          }
-
-          console.log(`OK: feed age ${ageMinutes.toFixed(1)} min, validator connected`);
-          NODE
-            then
-              fail_check "$name" "watch-status.json is stale, malformed, or validator is not connected"
-            fi
-            echo "::endgroup::"
-          }
-
-          soft_http() {
-            local name="$1"
-            local url="$2"
-
-            echo "::group::${name}"
-            if fetch_url "$url" >/dev/null; then
-              echo "OK: ${url}"
-            else
-              warn_check "$name" "Non-blocking external feed check failed: ${url}"
-            fi
-            echo "::endgroup::"
-          }
-
-          check_contains "MirSFlr Website" "https://www.mirhollio.com/" "MirSFlr"
-          check_validator_health
-          check_watch_status
-
-          soft_http "Flare Systems Explorer Provider Registry" "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3"
-          soft_http "Oracle Daemon Validator Feed" "https://api.oracle-daemon.com/v1/flare/validators"
-
-          if [ "$failures" -gt 0 ]; then
-            echo "${failures} critical infra check(s) failed."
-            exit 1
-          fi
-
-          echo "All critical MirSFlr infra checks passed."

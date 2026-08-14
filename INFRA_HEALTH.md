@@ -12,9 +12,16 @@ If a critical check fails, the workflow run becomes red/failed.
 
 You will see it in:
 
+- MirHollio OPS dashboard: https://www.mirhollio.com/ops/
 - GitHub Actions -> `Infra Health CI`
 - GitHub email notifications, if failed workflow notifications are enabled for your GitHub account/repo
 - The workflow badge, if you add or view it from GitHub
+
+The workflow also publishes a small machine-readable status file:
+
+- Public JSON: https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json
+
+The OPS dashboard reads that JSON and shows it as a simple green/yellow/red infra panel.
 
 ## Critical Checks
 

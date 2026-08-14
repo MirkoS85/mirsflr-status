@@ -1,0 +1,82 @@
+{
+  "schema": "mirsflr-infra-health/v1",
+  "generatedAt": "2026-08-14T08:48:19.057Z",
+  "overall": "warn",
+  "summary": "1 MirSFlr check needs attention; critical infra is still up.",
+  "monitor": {
+    "name": "Infra Health CI",
+    "intervalMinutes": 15,
+    "statusPath": "api/infra-health/status.json",
+    "workflow": "https://github.com/MirkoS85/mirsflr-status/actions/workflows/infra-health.yml"
+  },
+  "checks": [
+    {
+      "id": "website",
+      "label": "Website",
+      "kind": "critical",
+      "status": "ok",
+      "url": "https://www.mirhollio.com/",
+      "message": "Website is reachable and contains the expected MirSFlr marker.",
+      "checkedAt": "2026-08-14T08:48:19.047Z"
+    },
+    {
+      "id": "validator-node",
+      "label": "Validator node",
+      "kind": "critical",
+      "status": "ok",
+      "url": "https://node.mirhollio.com/flare/ext/health",
+      "message": "Validator reports healthy=true, 458 peers, 98.5% validator reach.",
+      "checkedAt": "2026-08-14T08:48:19.053Z",
+      "peers": 458,
+      "validatorReachPct": 98.5
+    },
+    {
+      "id": "watch-feed",
+      "label": "Watch feed",
+      "kind": "critical",
+      "status": "warn",
+      "url": "https://www.mirhollio.com/data/watch-status.json",
+      "message": "Watch feed is 45.9 minutes old; validator is connected.",
+      "checkedAt": "2026-08-14T08:48:19.055Z",
+      "generatedAt": "2026-08-14T08:02:25.512Z",
+      "ageMinutes": 45.9,
+      "validator": {
+        "status": "connected",
+        "stake": 89998943,
+        "capacity": 90000000,
+        "fillPct": 99.9988,
+        "free": 1057
+      },
+      "ftso": {
+        "status": "ok",
+        "availability": 1,
+        "availability6h": 1,
+        "availability24h": 1
+      },
+      "fdc": {
+        "status": "ok",
+        "availability": 0.9786245071276919,
+        "availability6h": 0.9756838341377815,
+        "availability24h": 0.9788597786117781
+      }
+    },
+    {
+      "id": "fse-registry",
+      "label": "FSE registry",
+      "kind": "external",
+      "status": "ok",
+      "url": "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3",
+      "message": "External reference feed is reachable.",
+      "checkedAt": "2026-08-14T08:48:19.056Z"
+    },
+    {
+      "id": "oracle-validators",
+      "label": "Oracle validators",
+      "kind": "external",
+      "status": "ok",
+      "url": "https://api.oracle-daemon.com/v1/flare/validators",
+      "message": "External reference feed is reachable.",
+      "checkedAt": "2026-08-14T08:48:19.057Z"
+    }
+  ]
+}
