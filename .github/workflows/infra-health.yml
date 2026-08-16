@@ -1,8 +1,6 @@
 name: Infra Health CI
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
