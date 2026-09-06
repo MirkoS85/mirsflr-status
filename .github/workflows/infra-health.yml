@@ -2,13 +2,20 @@ name: Infra Health CI
 
 on:
   workflow_dispatch:
+  schedule:
+    # This is the cadence the published payload advertises as
+    # monitor.intervalMinutes, and the one the OPS page grades freshness
+    # against. Without it the workflow only ran on manual dispatch.
+    - cron: "*/15 * * * *"
 
 permissions:
   contents: write
 
 concurrency:
   group: infra-health
-  cancel-in-progress: true
+  # A cancelled run publishes nothing, which is the one outcome this monitor
+  # must not have.
+  cancel-in-progress: false
 
 jobs:
   check:
@@ -18,6 +25,10 @@ jobs:
     steps:
       - name: Check MirSFlr critical endpoints
         shell: bash
+        env:
+          # publishStatus() needs this; without it the run checks everything,
+          # reports success, and publishes nothing.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node <<'NODE'
           const STATUS_PATH = "api/infra-health/status.json";
