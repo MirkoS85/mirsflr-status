@@ -1,8 +1,8 @@
 {
   "schema": "mirsflr-infra-health/v1",
-  "generatedAt": "2026-08-14T08:48:19.057Z",
-  "overall": "warn",
-  "summary": "1 MirSFlr check needs attention; critical infra is still up.",
+  "generatedAt": "2026-09-09T10:19:53.305Z",
+  "overall": "ok",
+  "summary": "All critical MirSFlr infra checks passed.",
   "monitor": {
     "name": "Infra Health CI",
     "intervalMinutes": 15,
@@ -19,7 +19,7 @@
       "status": "ok",
       "url": "https://www.mirhollio.com/",
       "message": "Website is reachable and contains the expected MirSFlr marker.",
-      "checkedAt": "2026-08-14T08:48:19.047Z"
+      "checkedAt": "2026-09-09T10:19:52.401Z"
     },
     {
       "id": "validator-node",
@@ -27,39 +27,220 @@
       "kind": "critical",
       "status": "ok",
       "url": "https://node.mirhollio.com/flare/ext/health",
-      "message": "Validator reports healthy=true, 458 peers, 98.5% validator reach.",
-      "checkedAt": "2026-08-14T08:48:19.053Z",
+      "message": "Validator reports healthy=true, 458 peers, 98.6% validator reach.",
+      "checkedAt": "2026-09-09T10:19:52.621Z",
       "peers": 458,
-      "validatorReachPct": 98.5
+      "validatorReachPct": 98.60371792440503
     },
     {
       "id": "watch-feed",
       "label": "Watch feed",
       "kind": "critical",
-      "status": "warn",
+      "status": "ok",
       "url": "https://www.mirhollio.com/data/watch-status.json",
-      "message": "Watch feed is 45.9 minutes old; validator is connected.",
-      "checkedAt": "2026-08-14T08:48:19.055Z",
-      "generatedAt": "2026-08-14T08:02:25.512Z",
-      "ageMinutes": 45.9,
-      "validator": {
-        "status": "connected",
-        "stake": 89998943,
-        "capacity": 90000000,
-        "fillPct": 99.9988,
-        "free": 1057
-      },
-      "ftso": {
+      "message": "Watch feed is 2.1 minutes old; validator is connected.",
+      "checkedAt": "2026-09-09T10:19:52.396Z",
+      "generatedAt": "2026-09-09T10:17:46.883Z",
+      "ageMinutes": 2.1,
+      "fdc": {
         "status": "ok",
         "availability": 1,
         "availability6h": 1,
-        "availability24h": 1
+        "availability24h": 1,
+        "availabilityHourly24h": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "participation": 100,
+        "conditionMet": true,
+        "rewardedVotingRounds": 3360,
+        "totalRewardedVotingRounds": 3360
       },
-      "fdc": {
+      "ftso": {
         "status": "ok",
-        "availability": 0.9786245071276919,
-        "availability6h": 0.9756838341377815,
-        "availability24h": 0.9788597786117781
+        "latestCompletedEpoch": 430,
+        "signingPolicyEpoch": 431,
+        "weight": 156166675.5806065,
+        "delegatedWeight": 66166988.83565518,
+        "cappedDelegatedWeight": 66166988.83565518,
+        "stakingWeight": 89999686.7449513,
+        "delegationFeeBips": 2000,
+        "rewardRate": 1.7760968823497125,
+        "performance": 0.7710148585659717,
+        "primaryPerformance": 0.4502919548353442,
+        "secondaryPerformance": 0.9848301277197233,
+        "availability": 1,
+        "availability6h": 1,
+        "availability24h": 1,
+        "availabilityHourly24h": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "performanceHourly24h": [
+          0.7707885304659499,
+          0.7760132340777502,
+          0.7786399302528335,
+          0.7719815668202765,
+          0.7794245858761988,
+          0.7799834574028123,
+          0.7728857890148213,
+          0.769485614646905,
+          0.7606286186931348,
+          0.7628596338273758,
+          0.7625448028673835,
+          0.7649641577060932,
+          0.7663594470046083,
+          0.7793906810035842,
+          0.7706368899917287,
+          0.7600169779286927,
+          0.7719815668202765,
+          0.7755517826825127,
+          0.7692652329749103,
+          0.765874363327674,
+          0.7704446381865737,
+          0.7679316888045541,
+          0.766213921901528,
+          0.7706281833616299
+        ],
+        "primaryPerformanceHourly24h": [
+          0.44713261648745517,
+          0.4629859387923904,
+          0.4622929380993897,
+          0.44585253456221197,
+          0.45902353966870096,
+          0.47229114971050457,
+          0.45510026155187444,
+          0.44659982563208367,
+          0.43010752688172044,
+          0.43199651264167394,
+          0.4392921146953405,
+          0.43727598566308246,
+          0.4394009216589862,
+          0.46124551971326166,
+          0.44210090984284534,
+          0.4325127334465195,
+          0.4465437788018433,
+          0.466893039049236,
+          0.4513888888888889,
+          0.4446095076400679,
+          0.4561900610287707,
+          0.44188804554079697,
+          0.44418505942275044,
+          0.45458404074702885
+        ],
+        "secondaryPerformanceHourly24h": [
+          0.9865591397849462,
+          0.9846980976013234,
+          0.9895379250217959,
+          0.9894009216589862,
+          0.993025283347864,
+          0.9851116625310173,
+          0.9847428073234524,
+          0.9847428073234524,
+          0.9809760132340778,
+          0.983435047951177,
+          0.9780465949820788,
+          0.9834229390681004,
+          0.9843317972350231,
+          0.9914874551971327,
+          0.9896608767576509,
+          0.9783531409168081,
+          0.9889400921658986,
+          0.9813242784380306,
+          0.9811827956989247,
+          0.9800509337860781,
+          0.979947689625109,
+          0.9852941176470589,
+          0.980899830220713,
+          0.9813242784380306
+        ]
+      },
+      "validator": {
+        "status": "connected",
+        "stake": 89999680,
+        "capacity": 90000000,
+        "fillPct": 99.9996,
+        "free": 320,
+        "delegation": 83999680,
+        "selfBond": 6000000,
+        "delegationCount": 51,
+        "stakeEnd": "2026-10-19T10:00:00Z",
+        "topDelegations": [
+          {
+            "address": null,
+            "amount": 15961608,
+            "start": "2026-08-31T11:55:19Z",
+            "end": "2026-10-18T11:55:06Z"
+          },
+          {
+            "address": null,
+            "amount": 15000000,
+            "start": "2026-07-20T19:50:40Z",
+            "end": "2026-10-19T10:00:00Z"
+          },
+          {
+            "address": null,
+            "amount": 11290999,
+            "start": "2026-08-31T23:21:29Z",
+            "end": "2026-09-14T23:31:22Z"
+          },
+          {
+            "address": null,
+            "amount": 7870400,
+            "start": "2026-08-31T17:04:12Z",
+            "end": "2026-09-17T18:55:00Z"
+          },
+          {
+            "address": null,
+            "amount": 6301690,
+            "start": "2026-08-22T00:20:37Z",
+            "end": "2026-10-04T23:30:00Z"
+          }
+        ]
       }
     },
     {
@@ -69,7 +250,7 @@
       "status": "ok",
       "url": "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3",
       "message": "External reference feed is reachable.",
-      "checkedAt": "2026-08-14T08:48:19.056Z"
+      "checkedAt": "2026-09-09T10:19:53.052Z"
     },
     {
       "id": "oracle-validators",
@@ -78,7 +259,7 @@
       "status": "ok",
       "url": "https://api.oracle-daemon.com/v1/flare/validators",
       "message": "External reference feed is reachable.",
-      "checkedAt": "2026-08-14T08:48:19.057Z"
+      "checkedAt": "2026-09-09T10:19:53.304Z"
     }
   ]
 }
