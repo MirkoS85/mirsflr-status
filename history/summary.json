@@ -31,7 +31,7 @@
     "time": 447,
     "timeDay": 0,
     "timeWeek": 0,
-    "timeMonth": 429,
+    "timeMonth": 436,
     "timeYear": 447,
     "dailyMinutesDown": {}
   },
@@ -49,7 +49,7 @@
     "time": 376,
     "timeDay": 0,
     "timeWeek": 0,
-    "timeMonth": 476,
+    "timeMonth": 491,
     "timeYear": 376,
     "dailyMinutesDown": {}
   },
@@ -59,15 +59,15 @@
     "icon": "https://icons.duckduckgo.com/ip3/api.oracle-daemon.com.ico",
     "slug": "validator-metrics-feed",
     "status": "up",
-    "uptime": "99.88%",
+    "uptime": "99.89%",
     "uptimeDay": "100.00%",
     "uptimeWeek": "100.00%",
     "uptimeMonth": "100.00%",
-    "uptimeYear": "99.88%",
+    "uptimeYear": "99.89%",
     "time": 1317,
     "timeDay": 0,
     "timeWeek": 0,
-    "timeMonth": 1339,
+    "timeMonth": 1355,
     "timeYear": 1317,
     "dailyMinutesDown": {
       "2026-06-18": 145
@@ -87,7 +87,7 @@
     "time": 568,
     "timeDay": 0,
     "timeWeek": 0,
-    "timeMonth": 387,
+    "timeMonth": 395,
     "timeYear": 568,
     "dailyMinutesDown": {
       "2026-07-05": 81
