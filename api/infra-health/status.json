@@ -1,6 +1,6 @@
 {
   "schema": "mirsflr-infra-health/v1",
-  "generatedAt": "2026-09-23T15:04:37.998Z",
+  "generatedAt": "2026-09-23T19:03:31.473Z",
   "overall": "ok",
   "summary": "All critical MirSFlr infra checks passed.",
   "monitor": {
@@ -19,7 +19,7 @@
       "status": "ok",
       "url": "https://www.mirhollio.com/",
       "message": "Website is reachable and contains the expected MirSFlr marker.",
-      "checkedAt": "2026-09-23T15:04:36.730Z"
+      "checkedAt": "2026-09-23T19:03:30.545Z"
     },
     {
       "id": "validator-node",
@@ -27,10 +27,10 @@
       "kind": "critical",
       "status": "ok",
       "url": "https://node.mirhollio.com/flare/ext/health",
-      "message": "Validator reports healthy=true, 449 peers, 98.7% validator reach.",
-      "checkedAt": "2026-09-23T15:04:36.841Z",
-      "peers": 449,
-      "validatorReachPct": 98.70103587947942
+      "message": "Validator reports healthy=true, 450 peers, 98.7% validator reach.",
+      "checkedAt": "2026-09-23T19:03:30.735Z",
+      "peers": 450,
+      "validatorReachPct": 98.7054638898709
     },
     {
       "id": "watch-feed",
@@ -38,13 +38,13 @@
       "kind": "critical",
       "status": "ok",
       "url": "https://www.mirhollio.com/data/watch-status.json",
-      "message": "Watch feed is 4.6 minutes old; validator is connected.",
-      "checkedAt": "2026-09-23T15:04:36.723Z",
-      "generatedAt": "2026-09-23T15:00:02.875Z",
-      "ageMinutes": 4.6,
+      "message": "Watch feed is 1.9 minutes old; validator is connected.",
+      "checkedAt": "2026-09-23T19:03:30.536Z",
+      "generatedAt": "2026-09-23T19:01:37.502Z",
+      "ageMinutes": 1.9,
       "fdc": {
         "status": "ok",
-        "availability": 0.9995283018867924,
+        "availability": 0.9995603321934539,
         "availability6h": 1,
         "availability24h": 1,
         "availabilityHourly24h": [
@@ -88,10 +88,10 @@
         "stakingWeight": 83374475.62415306,
         "delegationFeeBips": 2000,
         "rewardRate": 1.510990541679287,
-        "performance": 0.784871322597543,
-        "primaryPerformance": 0.49343094678855676,
-        "secondaryPerformance": 0.9791649064702006,
-        "availability": 0.9994761655316919,
+        "performance": 0.7845829133064516,
+        "primaryPerformance": 0.4923489478326613,
+        "secondaryPerformance": 0.9794055569556451,
+        "availability": 0.99951171875,
         "availability6h": 1,
         "availability24h": 1,
         "availabilityHourly24h": [
@@ -121,6 +121,10 @@
           1
         ],
         "performanceHourly24h": [
+          0.7869012707722385,
+          0.7818100358422939,
+          0.7726267281105991,
+          0.7814746543778802,
           0.7482830385015609,
           0.7782732447817837,
           0.8080645161290323,
@@ -140,13 +144,13 @@
           0.7962998102466793,
           0.7957885304659498,
           0.7830645161290323,
-          0.8052534562211981,
-          0.788294930875576,
-          0.7911764705882353,
-          0.8004449388209122,
-          0.796512641673932
+          0.8052534562211981
         ],
         "primaryPerformanceHourly24h": [
+          0.4826490713587488,
+          0.4746863799283154,
+          0.46543778801843316,
+          0.4875576036866359,
           0.4565556711758585,
           0.46133776091081596,
           0.5336812144212524,
@@ -166,13 +170,13 @@
           0.514943074003795,
           0.5109767025089605,
           0.4826108870967742,
-          0.522811059907834,
-          0.49216589861751153,
-          0.4985768500948767,
-          0.5102892102335929,
-          0.509590235396687
+          0.522811059907834
         ],
         "secondaryPerformanceHourly24h": [
+          0.9897360703812317,
+          0.9865591397849462,
+          0.9774193548387097,
+          0.9774193548387097,
           0.9427679500520292,
           0.9895635673624289,
           0.9909867172675522,
@@ -192,11 +196,7 @@
           0.9838709677419355,
           0.985663082437276,
           0.983366935483871,
-          0.9935483870967742,
-          0.9857142857142858,
-          0.9862428842504743,
-          0.9938820912124583,
-          0.987794245858762
+          0.9935483870967742
         ]
       },
       "validator": {
@@ -250,7 +250,7 @@
       "status": "ok",
       "url": "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3",
       "message": "External reference feed is reachable.",
-      "checkedAt": "2026-09-23T15:04:37.141Z"
+      "checkedAt": "2026-09-23T19:03:31.020Z"
     },
     {
       "id": "oracle-validators",
@@ -259,7 +259,7 @@
       "status": "ok",
       "url": "https://api.oracle-daemon.com/v1/flare/validators",
       "message": "External reference feed is reachable.",
-      "checkedAt": "2026-09-23T15:04:37.998Z"
+      "checkedAt": "2026-09-23T19:03:31.472Z"
     }
   ]
 }
