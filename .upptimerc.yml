@@ -9,12 +9,15 @@ sites:
       - 200
     __dangerous__body_down_if_text_missing: "MirSFlr"
 
-  - name: Validator Node Health
-    url: https://node.mirhollio.com/flare/ext/health
-    maxResponseTime: 5000
+  # Checked through the published feed rather than by calling the node, so the
+  # status page never names an operator endpoint. The feed only claims the
+  # validator is connected when the Flare P-chain says so.
+  - name: Validator Connectivity
+    url: https://www.mirhollio.com/data/watch-status.json
+    maxResponseTime: 10000
     expectedStatusCodes:
       - 200
-    __dangerous__body_down_if_text_missing: '"healthy":true'
+    __dangerous__body_down_if_text_missing: '"status": "connected"'
 
   - name: FTSO Metrics Feed
     url: https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3/ftso

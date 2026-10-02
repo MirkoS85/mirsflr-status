@@ -23,14 +23,12 @@
     },
     {
       "id": "validator-node",
-      "label": "Validator node",
+      "label": "Validator connectivity",
       "kind": "critical",
-      "status": "ok",
-      "url": "https://node.mirhollio.com/flare/ext/health",
-      "message": "Validator reports healthy=true, 446 peers, 99.7% validator reach.",
-      "checkedAt": "2026-10-02T13:38:35.891Z",
-      "peers": 446,
-      "validatorReachPct": 99.72134127609039
+      "status": "warn",
+      "url": "https://flare-api.flare.network/ext/bc/P",
+      "message": "Pending next Infra Health CI run.",
+      "checkedAt": "2026-10-02T13:38:35.891Z"
     },
     {
       "id": "watch-feed",

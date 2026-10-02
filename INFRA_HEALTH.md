@@ -12,7 +12,6 @@ If a critical check fails, the workflow run becomes red/failed.
 
 You will see it in:
 
-- MirHollio OPS dashboard: https://www.mirhollio.com/ops/
 - GitHub Actions -> `Infra Health CI`
 - GitHub email notifications, if failed workflow notifications are enabled for your GitHub account/repo
 - The workflow badge, if you add or view it from GitHub
@@ -22,17 +21,26 @@ The workflow also publishes a small machine-readable status file:
 - OPS JSON source: https://raw.githubusercontent.com/MirkoS85/mirsflr-status/master/api/infra-health/status.json
 - GitHub Pages mirror: https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json
 
-The OPS dashboard reads the raw JSON source because it updates faster. The GitHub Pages mirror is public too, but can lag briefly because of caching.
+The raw JSON source updates faster than the GitHub Pages mirror, which can lag
+briefly because of caching. Both are public.
 
 ## Critical Checks
 
 These fail the workflow and should be treated as real MirSFlr infra signals:
 
 - `https://www.mirhollio.com/` returns OK and contains `MirSFlr`
-- `https://node.mirhollio.com/flare/ext/health` returns JSON with `healthy: true`
+- The Flare P-chain lists this validator in the current validator set and
+  reports it as connected. Asked of `flare-api.flare.network`, not of the node:
+  the network's own view is authoritative, and this repository is public, so it
+  names no operator endpoint.
 - `https://www.mirhollio.com/data/watch-status.json` is valid, less than 60 minutes old, and says the validator is connected
 
 The watch feed starts showing a yellow warning in the workflow log after 20 minutes, but it only fails the workflow after 60 minutes. That avoids noisy emails when GitHub schedules are simply delayed.
+
+Checking connectivity on-chain instead of on the node costs a little early
+warning: `/ext/health` reports a process problem - bootstrapping, a bad
+database - before the network notices, whereas the P-chain sees it once
+connectivity actually drops. In exchange, nothing here points at the node.
 
 ## Non-Blocking Checks
 

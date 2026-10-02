@@ -39,11 +39,16 @@ jobs:
               kind: "critical",
               url: "https://www.mirhollio.com/"
             },
+            // Asked of the Flare P-chain rather than of the node itself. The
+            // network's own view of whether this validator is connected is the
+            // signal that actually matters, it is authoritative rather than
+            // self-reported, and it means this public repository never names an
+            // operator endpoint.
             validator: {
               id: "validator-node",
-              label: "Validator node",
+              label: "Validator connectivity",
               kind: "critical",
-              url: "https://node.mirhollio.com/flare/ext/health"
+              url: "https://flare-api.flare.network/ext/bc/P"
             },
             watch: {
               id: "watch-feed",
@@ -73,14 +78,15 @@ jobs:
             console.log(`::${level} title=${cleanTitle}::${cleanMessage}`);
           }
 
-          async function fetchWithTimeout(url, timeoutMs = 20_000) {
+          async function fetchWithTimeout(url, timeoutMs = 20_000, init = {}) {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), timeoutMs);
             try {
               const response = await fetch(url, {
                 signal: controller.signal,
                 redirect: "follow",
-                headers: { "User-Agent": "mirsflr-infra-health/1.0" }
+                ...init,
+                headers: { "User-Agent": "mirsflr-infra-health/1.0", ...(init.headers || {}) }
               });
               const text = await response.text();
               if (!response.ok) {
@@ -140,25 +146,51 @@ jobs:
             }
           }
 
+          // The node ID is public on-chain data: every registered validator's ID
+          // is readable by anyone from the P-chain. It identifies, it does not
+          // address - there is nothing here to connect to.
+          const NODE_ID = "NodeID-8dNfgpspPNDrZD2ksKCRJoGe4Xqe6qVtz";
+
           async function checkValidatorNode() {
             try {
-              const { text } = await withRetries(() => fetchWithTimeout(CHECKS.validator.url));
+              const { text } = await withRetries(() => fetchWithTimeout(CHECKS.validator.url, 20_000, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  jsonrpc: "2.0", id: 1, method: "platform.getCurrentValidators", params: {}
+                })
+              }));
               const data = JSON.parse(text);
-              if (data.healthy !== true) {
-                return addCheck(CHECKS.validator, "down", `Validator health returned healthy=${JSON.stringify(data.healthy)}.`);
+              const validators = data?.result?.validators;
+              if (!Array.isArray(validators)) {
+                return addCheck(CHECKS.validator, "down", "P-chain returned no validator set.");
               }
-              const peerCount = Number(data?.checks?.network?.message?.connectedPeers);
-              const rawReach = Number(data?.checks?.P?.message?.networking?.percentConnected);
-              const reach = Number.isFinite(rawReach) && rawReach <= 1 ? rawReach * 100 : rawReach;
-              const parts = ["Validator reports healthy=true"];
-              if (Number.isFinite(peerCount)) parts.push(`${peerCount} peers`);
-              if (Number.isFinite(reach)) parts.push(`${reach.toFixed(1)}% validator reach`);
-              return addCheck(CHECKS.validator, "ok", `${parts.join(", ")}.`, {
-                peers: Number.isFinite(peerCount) ? peerCount : null,
-                validatorReachPct: Number.isFinite(reach) ? reach : null
+              const me = validators.find(v => v.nodeID === NODE_ID);
+              if (!me) {
+                // Not in the current validator set at all - the stake has ended
+                // or the registration lapsed. That is a real outage, not a blip.
+                return addCheck(CHECKS.validator, "down", `Validator ${NODE_ID} is not in the current P-chain validator set.`);
+              }
+              const connected = me.connected === true || me.connected === "true";
+              const uptime = Number(me.uptime);
+              const delegators = Array.isArray(me.delegators) ? me.delegators.length : null;
+              if (!connected) {
+                return addCheck(CHECKS.validator, "down", "P-chain reports the validator as not connected.", {
+                  uptimePct: Number.isFinite(uptime) ? uptime : null
+                });
+              }
+              const parts = ["P-chain reports the validator connected"];
+              if (Number.isFinite(uptime)) parts.push(`${uptime.toFixed(2)}% uptime`);
+              if (delegators != null) parts.push(`${delegators} delegations`);
+              // Below 80% the protocol stops paying out, so it is a warning long
+              // before it is an outage.
+              const status = Number.isFinite(uptime) && uptime < 80 ? "warn" : "ok";
+              return addCheck(CHECKS.validator, status, `${parts.join(", ")}.`, {
+                uptimePct: Number.isFinite(uptime) ? uptime : null,
+                delegations: delegators
               });
             } catch (error) {
-              return addCheck(CHECKS.validator, "down", `Validator health check failed: ${error.message}`);
+              return addCheck(CHECKS.validator, "down", `P-chain validator check failed: ${error.message}`);
             }
           }
 
