@@ -18,11 +18,11 @@ You will see it in:
 
 The workflow also publishes a small machine-readable status file:
 
-- OPS JSON source: https://raw.githubusercontent.com/MirkoS85/mirsflr-status/master/api/infra-health/status.json
-- GitHub Pages mirror: https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json
+- https://raw.githubusercontent.com/MirkoS85/mirsflr-status/master/api/infra-health/status.json
 
-The raw JSON source updates faster than the GitHub Pages mirror, which can lag
-briefly because of caching. Both are public.
+There used to be a GitHub Pages mirror of this file. It was published by an
+Upptime workflow that no longer exists, so the raw URL above is the only
+source.
 
 ## Critical Checks
 
@@ -51,6 +51,14 @@ These only show yellow warnings in the workflow log. They do not send a failure 
 
 ## Why Not Upptime
 
-The old Upptime `Uptime CI` ran every 5 minutes and depended on generated Upptime/GitHub Action components. It started failing before it could reliably tell whether MirSFlr infra was actually down, which caused noisy emails.
+The old Upptime `Uptime CI` ran every 5 minutes and depended on generated
+Upptime/GitHub Action components. It started failing before it could reliably
+tell whether MirSFlr infra was actually down, which caused noisy emails.
 
-This workflow is intentionally simpler: no checkout action, no Upptime action, no generated template.
+It was removed entirely in October 2026. By then its checking workflow had not
+run since 14 August, while the status page it generated kept reporting "up" and
+"100% uptime" from history frozen on 31 August - stale figures presented as
+current, which is worse than publishing nothing.
+
+This workflow is intentionally simpler: no checkout action, no Upptime action,
+no generated template.
