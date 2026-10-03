@@ -1,4 +1,4 @@
-# [📈 Live Status](https://MirkoS85.github.io/mirsflr-status): <!--live status--> **🟧 Partial outage**
+# [📈 Live Status](https://MirkoS85.github.io/mirsflr-status): <!--live status--> **🟩 All systems operational**
 
 This repository contains the open-source uptime monitor and status page for [MirkoS85](https://MirkoS85.github.io/mirsflr-status), powered by [Upptime](https://github.com/upptime/upptime).
 
