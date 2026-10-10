@@ -1,6 +1,6 @@
 {
   "schema": "mirsflr-infra-health/v1",
-  "generatedAt": "2026-10-10T15:31:05.554Z",
+  "generatedAt": "2026-10-10T19:32:15.784Z",
   "overall": "ok",
   "summary": "All critical MirSFlr infra checks passed.",
   "monitor": {
@@ -18,7 +18,7 @@
       "status": "ok",
       "url": "https://www.mirhollio.com/",
       "message": "Website is reachable and contains the expected MirSFlr marker.",
-      "checkedAt": "2026-10-10T15:31:04.544Z"
+      "checkedAt": "2026-10-10T19:32:14.654Z"
     },
     {
       "id": "validator-node",
@@ -27,7 +27,7 @@
       "status": "ok",
       "url": "https://flare-api.flare.network/ext/bc/P",
       "message": "P-chain reports the validator connected, 100.00% uptime, 77 delegations.",
-      "checkedAt": "2026-10-10T15:31:05.225Z",
+      "checkedAt": "2026-10-10T19:32:15.784Z",
       "uptimePct": 100,
       "delegations": 77
     },
@@ -37,10 +37,10 @@
       "kind": "critical",
       "status": "ok",
       "url": "https://www.mirhollio.com/data/watch-status.json",
-      "message": "Watch feed is 4.8 minutes old; validator is connected.",
-      "checkedAt": "2026-10-10T15:31:04.467Z",
-      "generatedAt": "2026-10-10T15:26:17.560Z",
-      "ageMinutes": 4.8,
+      "message": "Watch feed is 4.5 minutes old; validator is connected.",
+      "checkedAt": "2026-10-10T19:32:14.646Z",
+      "generatedAt": "2026-10-10T19:27:41.961Z",
+      "ageMinutes": 4.5,
       "fdc": {
         "status": "ok",
         "availability": 1,
@@ -87,9 +87,9 @@
         "stakingWeight": 84444248.87481068,
         "delegationFeeBips": 2000,
         "rewardRate": 1.518606075160984,
-        "performance": 0.8039415628983234,
-        "primaryPerformance": 0.5288557701735465,
-        "secondaryPerformance": 0.987332091381508,
+        "performance": 0.8028727868734353,
+        "primaryPerformance": 0.526701608400425,
+        "secondaryPerformance": 0.9869869058554421,
         "availability": 1,
         "availability6h": 1,
         "availability24h": 1,
@@ -120,6 +120,10 @@
           1
         ],
         "performanceHourly24h": [
+          0.7872711421098518,
+          0.7896774193548387,
+          0.7922406277244987,
+          0.7940714908456844,
           0.7876344086021505,
           0.7887510339123243,
           0.7988666085440279,
@@ -139,13 +143,13 @@
           0.8132718894009217,
           0.7948717948717948,
           0.8015280135823429,
-          0.8040529363110008,
-          0.8042114695340502,
-          0.7931239388794568,
-          0.8006272401433692,
-          0.7901482127288579
+          0.8040529363110008
         ],
         "primaryPerformanceHourly24h": [
+          0.495640802092415,
+          0.5018433179723503,
+          0.5067567567567568,
+          0.5054489973844812,
           0.4959677419354839,
           0.489247311827957,
           0.522667829119442,
@@ -165,13 +169,13 @@
           0.5504608294930876,
           0.5188172043010753,
           0.5267402376910016,
-          0.5312241521918941,
-          0.5273297491039427,
-          0.5025466893039049,
-          0.514336917562724,
-          0.495640802092415
+          0.5312241521918941
         ],
         "secondaryPerformanceHourly24h": [
+          0.981691368788143,
+          0.9815668202764977,
+          0.9825632083696599,
+          0.9864864864864865,
           0.982078853046595,
           0.9884201819685691,
           0.9829991281604185,
@@ -191,11 +195,7 @@
           0.988479262672811,
           0.9789081885856079,
           0.9847198641765704,
-          0.9859387923904053,
-          0.9887992831541219,
-          0.9868421052631579,
-          0.9914874551971327,
-          0.9864864864864865
+          0.9859387923904053
         ]
       },
       "validator": {
@@ -249,7 +249,7 @@
       "status": "ok",
       "url": "https://flare-systems-explorer.flare.network/backend-url/api/v0/entity/0xb5A081dEc72c8C87256b7e14cFAdcbc342bDeac3",
       "message": "External reference feed is reachable.",
-      "checkedAt": "2026-10-10T15:31:05.084Z"
+      "checkedAt": "2026-10-10T19:32:14.944Z"
     },
     {
       "id": "oracle-validators",
@@ -258,7 +258,7 @@
       "status": "ok",
       "url": "https://api.oracle-daemon.com/v1/flare/validators",
       "message": "External reference feed is reachable.",
-      "checkedAt": "2026-10-10T15:31:05.554Z"
+      "checkedAt": "2026-10-10T19:32:15.619Z"
     }
   ]
 }
