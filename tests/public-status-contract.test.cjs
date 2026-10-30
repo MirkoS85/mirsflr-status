@@ -1,7 +1,7 @@
 "use strict";
 
-// Offline only. The workflow's fetch is replaced inside a VM; this file never
-// imports a network client, runs the real monitor, or writes published data.
+// Offline only. Every workflow fetch is replaced inside a VM. The sole allowed
+// module exposes HTTP reason constants, never a network client or a real write.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -9,6 +9,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { format } = require("node:util");
 const { execFileSync, spawnSync } = require("node:child_process");
+const httpReasons = require("node:http").STATUS_CODES;
 
 const root = path.resolve(__dirname, "..");
 const workflowPath = ".github/workflows/infra-health.yml";
@@ -30,7 +31,13 @@ function scriptFrom(yaml) {
 const script = scriptFrom(workflow);
 const contract = script.match(/\/\/ BEGIN PUBLIC STATUS CONTRACT([\s\S]*?)\/\/ END PUBLIC STATUS CONTRACT/);
 assert.ok(contract, "publication guard must be explicitly delimited");
-const validate = vm.runInNewContext(`${contract[1]}\nassertPublicStatus;`, {});
+const publicPrefix = script.slice(0, script.indexOf("const checks = [];"));
+const safeRequire = name => {
+  if (name !== "node:http") throw new Error("Unexpected offline module");
+  return { STATUS_CODES: httpReasons };
+};
+const validate = vm.runInNewContext(`${publicPrefix}\n${contract[1]}\nassertPublicStatus;`, { require: safeRequire });
+const validateUrls = vm.runInNewContext(`${publicPrefix}\nassertPublicUrls;`, { require: safeRequire });
 
 function watchFixture() {
   const check = fixture.checks[watchIndex];
@@ -52,7 +59,7 @@ function createOfflineHarness(options = {}) {
   const previousPublic = JSON.stringify(fixture, null, 2) + "\n";
   let storedPublic = previousPublic;
   const response = (body, status = 200) => ({
-    ok: status >= 200 && status < 300, status, statusText: status === 200 ? "OK" : "Unavailable",
+    ok: status >= 200 && status < 300, status, statusText: require("node:http").STATUS_CODES[status] || "",
     text: async () => typeof body === "string" ? body : JSON.stringify(body),
     json: async () => typeof body === "string" ? JSON.parse(body) : body
   });
@@ -60,7 +67,7 @@ function createOfflineHarness(options = {}) {
     if (url.startsWith("https://api.github.com/repos/offline/status/contents/")) {
       apiCalls.push({ url, init });
       if (init.method === "PUT") {
-        if (options.publicationFailure === "put-http") return response({ message: "Synthetic publication failure" }, 503);
+        if (options.publicationFailure === "put-http") return response({ message: options.httpErrorBody || "Synthetic publication failure" }, 503);
         if (options.publicationFailure === "put-network") throw new Error("Synthetic publication network failure");
         const request = JSON.parse(init.body);
         published = Buffer.from(request.content, "base64").toString("utf8");
@@ -69,15 +76,21 @@ function createOfflineHarness(options = {}) {
         return response({});
       }
       if (options.publicationFailure === "get-http") return response({}, 503);
-      if (options.publicationFailure === "get-json") return response("invalid JSON");
+      if (options.publicationFailure === "get-json") return response(options.httpErrorBody || "invalid JSON");
       if (options.publicationFailure === "get-network") throw new Error("Synthetic publication read failure");
       return response({ sha: "offline-sha" });
     }
     if (url === "https://www.mirhollio.com/") {
+      if (options.websiteException) throw options.websiteException;
+      if (options.websiteHttpError) {
+        const r = response(options.httpErrorBody || "invalid response", 503);
+        r.statusText = options.httpStatusText || "Service Unavailable";
+        return r;
+      }
       return response(options.website === undefined ? "MirSFlr" : options.website);
     }
     if (url === "https://flare-api.flare.network/ext/bc/P") {
-      if (options.rpcError) throw new Error("Synthetic RPC timeout");
+      if (options.rpcError) throw new TypeError("fetch failed");
       return response({ result: { validators: [{
         nodeID: "NodeID-8dNfgpspPNDrZD2ksKCRJoGe4Xqe6qVtz",
         connected: options.connected ?? true, uptime: options.uptime ?? "99.9975",
@@ -93,6 +106,10 @@ function createOfflineHarness(options = {}) {
   };
   const context = {
     fetch, Date: FixedDate, Buffer, AbortController,
+    require: name => {
+      if (name !== "node:http") throw new Error("Unexpected offline module");
+      return { STATUS_CODES: require("node:http").STATUS_CODES };
+    },
     setTimeout: (fn, ms) => { if (ms < 20_000) queueMicrotask(fn); return 0; },
     clearTimeout: () => {},
     console: Object.fromEntries(["log", "error"].map(level => [level, (...args) => {
@@ -244,8 +261,7 @@ test("offline workflow output, metrics, health decisions and publication target 
   const cases = [
     {}, { connected: false }, { uptime: "79" }, { rpcError: true },
     { externalDown: true }, { website: "Unexpected content" },
-    { watch: stale }, { watch: partial }, { watch: impaired }, { watch: invalidTime },
-    { watch: {} }, { watch: "invalid JSON" }
+    { watch: stale }, { watch: partial }, { watch: impaired }, { watch: {} }
   ];
   for (const options of cases) {
     const before = await runOffline(baseline, options);
@@ -256,6 +272,16 @@ test("offline workflow output, metrics, health decisions and publication target 
     // Headers originate in separate VM realms; compare JSON data, not prototypes.
     assert.equal(JSON.stringify(after.apiCalls), JSON.stringify(before.apiCalls),
       "publication destination or request changed");
+  }
+  // Invalid inputs may change diagnostic text, never health decisions or endpoints.
+  for (const watch of [invalidTime, "invalid JSON"]) {
+    const before = await runOffline(baseline, { watch });
+    const after = await runOffline(workflow, { watch });
+    const oldPayload = JSON.parse(before.published), newPayload = JSON.parse(after.published);
+    assert.equal(newPayload.schema, oldPayload.schema);
+    assert.equal(newPayload.overall, oldPayload.overall);
+    assert.deepEqual(newPayload.checks.map(c => [c.id, c.status, c.url]), oldPayload.checks.map(c => [c.id, c.status, c.url]));
+    assert.deepEqual(after.exits, before.exits);
   }
 });
 
@@ -295,7 +321,8 @@ test("a response lost after an accepted write can fail the job even though the p
   assert.equal(after.storedPublic, after.published);
   assert.equal(after.storedPublic, before.storedPublic);
   assert.equal(JSON.stringify(after.apiCalls), JSON.stringify(before.apiCalls));
-  assert.ok(after.logs.some(line => line.includes("Synthetic response lost after write")));
+  assert.ok(after.logs.some(line => line.includes("[publication] Request failed.")));
+  assert.ok(after.logs.every(line => !line.includes("Synthetic response lost after write")));
 });
 
 test("missing publication credentials or context fail instead of silently succeeding", async () => {
@@ -362,12 +389,130 @@ test("the actual Node process exits 1 on validation rejection with no publicatio
   assert.ok(!(child.stdout + child.stderr).includes("confidential-child-canary"));
 });
 
-test("schedule, permissions, endpoints and health logic are untouched; only missing publication context now fails", () => {
-  const withoutGuard = workflow.replace(/          \/\/ BEGIN PUBLIC STATUS CONTRACT[\s\S]*?          \/\/ END PUBLIC STATUS CONTRACT\n\n/, "")
-    .replace("            assertPublicStatus(payload);\n", "");
-  const expected = baseline.replace(
-    '              console.log("Skipping publish outside GitHub Actions.");\n              return;',
-    '              throw new Error("Status publication requires a token and repository context.");'
-  );
-  assert.equal(withoutGuard, expected);
+test("schedule, permissions, endpoints, retry configuration and health aggregation remain unchanged", () => {
+  const prefix = text => text.slice(0, text.indexOf("          const checks = [];"));
+  const stripSafety = text => text.replace(/          \/\/ BEGIN PUBLIC OUTPUT SAFETY[\s\S]*?          \/\/ END PUBLIC OUTPUT SAFETY\n\n/, "");
+  assert.equal(stripSafety(prefix(workflow)), prefix(baseline));
+  for (const [start, end] of [["function overallStatus()", "// BEGIN PUBLIC STATUS CONTRACT"], ["async function withRetries(", "function addCheck("]]) {
+    const section = text => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start))).trim();
+    const oldEnd = end === "// BEGIN PUBLIC STATUS CONTRACT" ? "async function publishStatus(" : end;
+    assert.equal(section(script), scriptFrom(baseline).slice(scriptFrom(baseline).indexOf(start), scriptFrom(baseline).indexOf(oldEnd, scriptFrom(baseline).indexOf(start))).trim());
+  }
+});
+
+test("invalid schema and validator status values cannot leak through messages, logs or annotations", async () => {
+  const canary = "sensitive-input-canary";
+  for (const field of ["schema", "validatorStatus"]) {
+    for (const value of [{ token: canary, nested: { adminUrl: canary } }, [canary], canary]) {
+      const watch = watchFixture();
+      if (field === "schema") watch.schema = value;
+      else watch.validator.status = value;
+      const before = await runOffline(baseline, { watch });
+      const after = await runOffline(workflow, { watch });
+      const a = JSON.parse(after.published), b = JSON.parse(before.published);
+      assert.equal(a.overall, b.overall);
+      assert.deepEqual(after.exits, before.exits);
+      assert.ok(!(after.published + after.logs.join("\n")).includes(canary));
+      assert.ok(after.logs.some(line => line.startsWith("::error title=Watch feed::")));
+      assert.match(a.checks[watchIndex].message, /invalid type|unrecognized value/);
+    }
+  }
+});
+
+test("unexpected timestamps and JSON types are not echoed or copied into output", async () => {
+  const canary = "timestamp-json-canary";
+  const watch = watchFixture();
+  watch.generatedAt = `2030-01-01 (${canary})`;
+  for (const input of [watch, { ...watch, generatedAt: { token: canary } }, null, [], canary]) {
+    const result = await runOffline(workflow, { watch: input });
+    assert.ok(result.published);
+    assert.ok(!(result.published + result.logs.join("\n")).includes(canary));
+    assert.equal(JSON.parse(result.published).overall, "down");
+  }
+  const parseable = watchFixture();
+  parseable.generatedAt = `Thu, 29 Oct 2026 16:16:03 GMT (${canary})`;
+  const before = await runOffline(baseline, { watch: parseable });
+  const after = await runOffline(workflow, { watch: parseable });
+  assert.equal(JSON.parse(after.published).overall, JSON.parse(before.published).overall);
+  assert.equal(JSON.parse(after.published).checks[watchIndex].ageMinutes, JSON.parse(before.published).checks[watchIndex].ageMinutes);
+  assert.ok(!(after.published + after.logs.join("\n")).includes(canary));
+});
+
+test("raw exceptions, stacks, causes and fake public errors are never exposed", async () => {
+  const canary = "exception-secret-canary";
+  const errors = [new Error(canary), new TypeError(canary), new SyntaxError(canary),
+    { name: "AbortError", message: canary, stack: canary, cause: { token: canary } },
+    { name: "PublicMonitorError", message: canary, category: "publication" }];
+  for (const error of errors) {
+    error.cause = { token: canary };
+    const result = await runOffline(workflow, { websiteException: error });
+    assert.ok(result.published);
+    assert.equal(JSON.parse(result.published).overall, "down");
+    assert.ok(!(result.published + result.logs.join("\n")).includes(canary));
+  }
+});
+
+test("HTTP bodies and nonstandard reason phrases cannot leak through public errors", async () => {
+  const canary = "http-secret-canary";
+  const result = await runOffline(workflow, {
+    websiteHttpError: true, httpStatusText: canary, httpErrorBody: JSON.stringify({ token: canary })
+  });
+  assert.ok(!(result.published + result.logs.join("\n")).includes(canary));
+  assert.equal(JSON.parse(result.published).checks[0].message,
+    "Website request failed: HTTP 503 Service Unavailable");
+  for (const publicationFailure of ["put-http", "get-json"]) {
+    const failed = await runOffline(workflow, { publicationFailure, httpErrorBody: canary });
+    assert.equal(failed.published, null);
+    assert.deepEqual(failed.exits, [1]);
+    assert.ok(failed.logs.every(line => !line.includes(canary)));
+    assert.ok(failed.logs.some(line => line.includes("[publication]")));
+  }
+});
+
+test("approved current URLs remain byte-identical; unexpected URL values fail closed", () => {
+  const before = JSON.stringify(fixture);
+  validateUrls(fixture);
+  assert.equal(JSON.stringify(fixture), before);
+  const legacyPages = clone(fixture);
+  legacyPages.monitor.pagesUrl = "https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json";
+  validateUrls(legacyPages);
+  const canary = "url-secret-canary";
+  for (const url of ["http://127.0.0.1/admin", "https://internal.invalid/admin", `https://user:${canary}@example.invalid/`, `https://www.mirhollio.com/?token=${canary}`]) {
+    for (const mutate of [x => { x.checks[0].url = url; }, x => { x.monitor.rawUrl = url; }, x => { x.monitor.workflow = url; }, x => { x.monitor.pagesUrl = url; }]) {
+      const payload = clone(fixture); mutate(payload);
+      assert.throws(() => validateUrls(payload), error => {
+        assert.match(error.message, /unapproved .*URL/);
+        assert.ok(!error.message.includes(url) && !error.message.includes(canary));
+        return true;
+      });
+    }
+  }
+});
+
+test("unapproved output URLs are blocked before logging and before publication", async () => {
+  const canary = "url-log-canary";
+  const unsafe = `https://internal.invalid/admin?token=${canary}`;
+  for (const changed of [
+    workflow.replace("assertPublicCheckUrl(item);", `item.url = ${JSON.stringify(unsafe)}; assertPublicCheckUrl(item);`),
+    workflow.replace("await publishStatus(payload);", `payload.monitor.rawUrl = ${JSON.stringify(unsafe)}; await publishStatus(payload);`)
+  ]) {
+    const result = await runOffline(changed);
+    assert.equal(result.apiCalls.length, 0);
+    assert.equal(result.published, null);
+    assert.deepEqual(result.exits, [1]);
+    assert.ok(result.logs.every(line => !line.includes(canary) && !line.includes(unsafe)));
+    assert.ok(result.logs.some(line => line.includes("[public-contract]")));
+  }
+});
+
+test("normal public failure messages and approved diagnostic values remain unchanged", async () => {
+  for (const status of ["seen", "unknown", "disconnected", "offline"]) {
+    const watch = watchFixture(); watch.validator.status = status;
+    assert.equal((await runOffline(workflow, { watch })).published, (await runOffline(baseline, { watch })).published);
+  }
+  const future = watchFixture(); future.generatedAt = "2030-01-01T00:00:00.000Z";
+  const version = watchFixture(); version.schema = "mirsflr-watch-status/v2";
+  for (const watch of [future, version]) {
+    assert.equal((await runOffline(workflow, { watch })).published, (await runOffline(baseline, { watch })).published);
+  }
 });

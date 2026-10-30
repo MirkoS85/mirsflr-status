@@ -30,8 +30,26 @@ Before any publication request, an explicit field/type allowlist validates the
 complete payload, including historical v1 fields. It does not filter, rename,
 coerce or redact approved values. New fields, malformed structures and custom
 JSON serializers block the entire publication; rejected keys and values are not
-included in the guard's error. Existing free-text messages are not secret-scanned.
-Missing publication credentials or repository context also fail the run.
+included in the guard's error. Missing publication credentials or repository
+context also fail the run.
+
+Public diagnostics are constructed from controlled descriptions before logging.
+Unexpected schema/status objects, parser excerpts, raw exception messages,
+stacks, causes, HTTP response bodies and server-supplied reason phrases are not
+echoed. Standard HTTP reason constants and valid diagnostic values retain their
+existing wording. Unsafe or malformed inputs may produce a generic description
+instead; JSON field names/types and health decisions remain unchanged.
+
+Check URLs must match the approved static check mapping before they are logged
+and again before publication. Monitor URLs must match their approved values.
+Approved URLs are not normalized or rewritten. Historical JSON records are not
+modified. This remains a bounded publication policy, not a general-purpose
+secret scanner for every possible future public string.
+
+Failure logs distinguish `invalid-input`, `health-check-failure`,
+`public-contract`, `publication` and unexpected `monitor-execution` failures.
+Actions annotations are escaped; arbitrary Error objects are not logged.
+No workflow summary or additional public endpoint is introduced.
 
 A rejection emits a GitHub Actions error annotation and exits with code 1. The
 previous public JSON remains unchanged and can still say `overall: "ok"`. This
