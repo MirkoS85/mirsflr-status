@@ -264,12 +264,110 @@ jobs:
             return "All critical MirSFlr infra checks passed.";
           }
 
+          // BEGIN PUBLIC STATUS CONTRACT
+          // Validate without filtering, cloning or coercing: approved payloads
+          // retain every field and value. New fields block the entire publish
+          // until reviewed, instead of silently disappearing or becoming public.
+          // Includes historical v1 fields, not just today's status.json snapshot.
+          // Existing text is preserved verbatim; this is not a value redactor.
+          const publicObject = (fields, required = [], nullable = false) => ({
+            type: "object", fields, required, nullable
+          });
+          const publicArray = item => ({ type: "array", item, nullable: true });
+          const publicNumbers = names => Object.fromEntries(names.map(name => [name, "number|null"]));
+          const publicSeries = publicArray("number|null");
+          const publicFdc = publicObject({
+            status: "string",
+            ...publicNumbers(["availability", "availability6h", "availability24h", "participation",
+              "rewardedVotingRounds", "totalRewardedVotingRounds"]),
+            availabilityHourly24h: publicSeries,
+            conditionMet: "boolean|null"
+          }, [], true);
+          const publicFtso = publicObject({
+            status: "string",
+            ...publicNumbers(["latestCompletedEpoch", "signingPolicyEpoch", "weight", "delegatedWeight",
+              "cappedDelegatedWeight", "stakingWeight", "delegationFeeBips", "rewardRate", "performance",
+              "primaryPerformance", "secondaryPerformance", "availability", "availability6h", "availability24h"]),
+            availabilityHourly24h: publicSeries,
+            performanceHourly24h: publicSeries,
+            primaryPerformanceHourly24h: publicSeries,
+            secondaryPerformanceHourly24h: publicSeries
+          }, [], true);
+          const publicValidator = publicObject({
+            status: "string",
+            ...publicNumbers(["stake", "capacity", "fillPct", "free", "delegation", "selfBond", "delegationCount"]),
+            stakeEnd: "string|null",
+            topDelegations: publicArray(publicObject({
+              address: "string|null", amount: "number|null", start: "string|null", end: "string|null"
+            }))
+          }, [], true);
+          const publicCheck = publicObject({
+            id: "string", label: "string", kind: "string", status: "string", url: "string",
+            message: "string", checkedAt: "string", generatedAt: "string|null",
+            ...publicNumbers(["ageMinutes", "uptimePct", "delegations", "peers", "validatorReachPct"]),
+            fdc: publicFdc, ftso: publicFtso, validator: publicValidator
+          }, ["id", "label", "kind", "status", "url", "message", "checkedAt"]);
+          const publicStatusContract = publicObject({
+            schema: "string", generatedAt: "string", overall: "string", summary: "string",
+            monitor: publicObject({
+              name: "string", intervalMinutes: "number", statusPath: "string",
+              rawUrl: "string", pagesUrl: "string", workflow: "string"
+            }, ["name", "intervalMinutes", "statusPath", "workflow"]),
+            checks: { type: "array", item: publicCheck }
+          }, ["schema", "generatedAt", "overall", "summary", "monitor", "checks"]);
+
+          function assertPublicStatus(value, rule = publicStatusContract, path = "$") {
+            const blocked = reason => {
+              // Never include rejected keys or values: even a new key can
+              // contain confidential text. Only approved ancestor paths appear.
+              throw new Error(`Public status publication blocked: ${reason} at ${path}.`);
+            };
+            if (typeof rule === "string") {
+              const types = rule.split("|");
+              const type = value === null ? "null" : typeof value;
+              if (!types.includes(type) || (type === "number" && !Number.isFinite(value))) {
+                blocked("unexpected value type");
+              }
+              return;
+            }
+            if (value === null && rule.nullable) return;
+            // JSON.stringify must serialize the tree that was validated, not
+            // replace it through an own or inherited custom serializer.
+            if (value !== null && typeof value === "object" && "toJSON" in value) {
+              blocked("custom JSON serialization");
+            }
+            if (rule.type === "array") {
+              if (!Array.isArray(value)) blocked("expected array");
+              for (const key of Object.keys(value)) {
+                if (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length) {
+                  blocked("unapproved array field");
+                }
+              }
+              for (let index = 0; index < value.length; index += 1) {
+                assertPublicStatus(value[index], rule.item, `${path}[${index}]`);
+              }
+              return;
+            }
+            if (value === null || typeof value !== "object" || Array.isArray(value)
+                || Object.prototype.toString.call(value) !== "[object Object]") {
+              blocked("expected object");
+            }
+            for (const key of Object.keys(value)) {
+              if (!Object.hasOwn(rule.fields, key)) blocked("unapproved field");
+              assertPublicStatus(value[key], rule.fields[key], `${path}.${key}`);
+            }
+            for (const key of rule.required) {
+              if (!Object.hasOwn(value, key)) blocked("missing required field");
+            }
+          }
+          // END PUBLIC STATUS CONTRACT
+
           async function publishStatus(payload) {
+            assertPublicStatus(payload);
             const token = process.env.GITHUB_TOKEN;
             const repo = process.env.GITHUB_REPOSITORY;
             if (!token || !repo) {
-              console.log("Skipping publish outside GitHub Actions.");
-              return;
+              throw new Error("Status publication requires a token and repository context.");
             }
 
             const apiUrl = `https://api.github.com/repos/${repo}/contents/${STATUS_PATH}`;

@@ -24,6 +24,32 @@ There used to be a GitHub Pages mirror of this file. It was published by an
 Upptime workflow that no longer exists, so the raw URL above is the only
 source.
 
+## Public payload publication guard
+
+Before any publication request, an explicit field/type allowlist validates the
+complete payload, including historical v1 fields. It does not filter, rename,
+coerce or redact approved values. New fields, malformed structures and custom
+JSON serializers block the entire publication; rejected keys and values are not
+included in the guard's error. Existing free-text messages are not secret-scanned.
+Missing publication credentials or repository context also fail the run.
+
+A rejection emits a GitHub Actions error annotation and exits with code 1. The
+previous public JSON remains unchanged and can still say `overall: "ok"`. This
+is a monitoring/publication failure, not confirmation of an infrastructure
+outage. A GitHub API failure also fails the run; if a write request loses its
+response, whether the write reached GitHub cannot be inferred from that failure.
+
+Failed-run notifications depend on GitHub account settings and delivery; they
+do not guarantee timely operator notification. A job that never starts cannot
+report its own failure. Independent freshness monitoring remains a separate
+Phase 2 task; no watchdog, new service or fallback publisher is added here.
+
+Offline regression tests (mocked network only):
+
+```sh
+node --test tests/public-status-contract.test.cjs
+```
+
 ## Critical Checks
 
 These fail the workflow and should be treated as real MirSFlr infra signals:
