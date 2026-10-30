@@ -70,11 +70,75 @@ jobs:
             }
           };
 
+          // BEGIN PUBLIC OUTPUT SAFETY
+          const { STATUS_CODES } = require("node:http");
+          const publicErrors = new WeakMap();
+          function publicError(message, category = "invalid-input") {
+            const error = new Error(message);
+            publicErrors.set(error, { message, category });
+            return error;
+          }
+          function publicErrorText(error) {
+            if (publicErrors.has(error)) return publicErrors.get(error).message;
+            // Never echo arbitrary exception text, causes, stacks or JSON snippets.
+            if (error?.name === "AbortError") return "This operation was aborted";
+            if (error?.name === "TimeoutError") return "The operation was aborted due to timeout";
+            if (error?.name === "SyntaxError") return "Invalid JSON response.";
+            if (error?.name === "TypeError") return "fetch failed";
+            return "Request failed.";
+          }
+          function publicHttpStatus(status) {
+            return Number.isInteger(status) && status >= 100 && status <= 599 ? status : "invalid";
+          }
+          function publicJson(text) {
+            try {
+              const data = JSON.parse(text);
+              if (data === null || typeof data !== "object" || Array.isArray(data)) {
+                throw publicError("Invalid JSON response.");
+              }
+              return data;
+            }
+            catch { throw publicError("Invalid JSON response."); }
+          }
+          function publicTimestamp(value) {
+            return typeof value === "string"
+              && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+              && Number.isFinite(Date.parse(value));
+          }
+          function publicInputDescription(value, approved) {
+            if (value === undefined) return "undefined";
+            if (value === null) return "null";
+            if (typeof value !== "string") return "(invalid type)";
+            return approved(value) ? JSON.stringify(value) : "(unrecognized value)";
+          }
+          const publicCheckUrls = new Map(Object.values(CHECKS).map(check => [check.id, check.url]));
+          const publicMonitorUrls = {
+            rawUrl: "https://raw.githubusercontent.com/MirkoS85/mirsflr-status/master/api/infra-health/status.json",
+            pagesUrl: "https://mirkos85.github.io/mirsflr-status/api/infra-health/status.json",
+            workflow: "https://github.com/MirkoS85/mirsflr-status/actions/workflows/infra-health.yml"
+          };
+          function assertPublicCheckUrl(check) {
+            if (!publicCheckUrls.has(check.id) || check.url !== publicCheckUrls.get(check.id)) {
+              throw publicError("Public status publication blocked: unapproved check URL.", "public-contract");
+            }
+          }
+          function assertPublicUrls(payload) {
+            for (const check of payload.checks) assertPublicCheckUrl(check);
+            for (const key of Object.keys(publicMonitorUrls)) {
+              if (Object.hasOwn(payload.monitor, key) && payload.monitor[key] !== publicMonitorUrls[key]) {
+                throw publicError("Public status publication blocked: unapproved monitor URL.", "public-contract");
+              }
+            }
+          }
+          // END PUBLIC OUTPUT SAFETY
+
           const checks = [];
+          let monitorPhase = "monitor-execution";
 
           function annotation(level, title, message) {
-            const cleanTitle = String(title).replace(/[\r\n]/g, " ");
-            const cleanMessage = String(message).replace(/[\r\n]/g, " ");
+            const escape = value => String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+            const cleanTitle = escape(title).replace(/:/g, "%3A").replace(/,/g, "%2C");
+            const cleanMessage = escape(message);
             console.log(`::${level} title=${cleanTitle}::${cleanMessage}`);
           }
 
@@ -90,9 +154,14 @@ jobs:
               });
               const text = await response.text();
               if (!response.ok) {
-                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                const status = publicHttpStatus(response.status);
+                const reason = STATUS_CODES[status];
+                throw publicError(`HTTP ${status}${reason ? ` ${reason}` : ""}`, "health-check-failure");
               }
               return { response, text };
+            } catch (error) {
+              if (publicErrors.has(error)) throw error;
+              throw publicError(publicErrorText(error), "health-check-failure");
             } finally {
               clearTimeout(timer);
             }
@@ -122,10 +191,12 @@ jobs:
               checkedAt: new Date().toISOString(),
               ...details
             };
+            // URL checks precede all output, including Actions annotations.
+            assertPublicCheckUrl(item);
             checks.push(item);
             const groupTitle = `${base.label}: ${status.toUpperCase()}`;
             console.log(`::group::${groupTitle}`);
-            console.log(`${base.url}`);
+            console.log(item.url);
             console.log(message);
             if (details.ageMinutes != null) console.log(`ageMinutes=${details.ageMinutes}`);
             console.log("::endgroup::");
@@ -142,7 +213,7 @@ jobs:
               }
               return addCheck(CHECKS.website, "ok", "Website is reachable and contains the expected MirSFlr marker.");
             } catch (error) {
-              return addCheck(CHECKS.website, "down", `Website request failed: ${error.message}`);
+              return addCheck(CHECKS.website, "down", `Website request failed: ${publicErrorText(error)}`);
             }
           }
 
@@ -160,7 +231,7 @@ jobs:
                   jsonrpc: "2.0", id: 1, method: "platform.getCurrentValidators", params: {}
                 })
               }));
-              const data = JSON.parse(text);
+              const data = publicJson(text);
               const validators = data?.result?.validators;
               if (!Array.isArray(validators)) {
                 return addCheck(CHECKS.validator, "down", "P-chain returned no validator set.");
@@ -190,49 +261,54 @@ jobs:
                 delegations: delegators
               });
             } catch (error) {
-              return addCheck(CHECKS.validator, "down", `P-chain validator check failed: ${error.message}`);
+              return addCheck(CHECKS.validator, "down", `P-chain validator check failed: ${publicErrorText(error)}`);
             }
           }
 
           async function checkWatchFeed() {
             try {
               const { text } = await withRetries(() => fetchWithTimeout(CHECKS.watch.url));
-              const data = JSON.parse(text);
+              const data = publicJson(text);
               const errors = [];
               const generatedMs = Date.parse(data.generatedAt);
               const ageMinutes = (Date.now() - generatedMs) / 60000;
+              // Keep the original freshness calculation; never echo comments or
+              // arbitrary text that Date.parse happens to accept as a date.
+              const safeGeneratedAt = Number.isFinite(generatedMs)
+                ? (publicTimestamp(data.generatedAt) ? data.generatedAt : new Date(generatedMs).toISOString())
+                : null;
 
               if (data.schema !== "mirsflr-watch-status/v1") {
-                errors.push(`unexpected schema ${JSON.stringify(data.schema)}`);
+                errors.push(`unexpected schema ${publicInputDescription(data.schema, value => /^mirsflr-watch-status\/v\d{1,6}$/.test(value))}`);
               }
               if (!Number.isFinite(ageMinutes)) {
                 errors.push("generatedAt is missing or invalid");
               } else if (ageMinutes > 60) {
                 errors.push(`feed is stale: ${ageMinutes.toFixed(1)} minutes old`);
               } else if (ageMinutes < -5) {
-                errors.push(`generatedAt is in the future: ${data.generatedAt}`);
+                errors.push(`generatedAt is in the future: ${safeGeneratedAt}`);
               }
               if (data.validator?.status !== "connected") {
-                errors.push(`validator status is ${JSON.stringify(data.validator?.status)}`);
+                errors.push(`validator status is ${publicInputDescription(data.validator?.status, value => ["connected", "seen", "unknown", "disconnected", "offline"].includes(value))}`);
               }
 
               if (errors.length) {
                 return addCheck(CHECKS.watch, "down", errors.join("; "), {
-                  generatedAt: data.generatedAt || null,
+                  generatedAt: safeGeneratedAt,
                   ageMinutes: Number.isFinite(ageMinutes) ? Number(ageMinutes.toFixed(1)) : null
                 });
               }
 
               const status = ageMinutes > 20 ? "warn" : "ok";
               return addCheck(CHECKS.watch, status, `Watch feed is ${ageMinutes.toFixed(1)} minutes old; validator is connected.`, {
-                generatedAt: data.generatedAt,
+                generatedAt: safeGeneratedAt,
                 ageMinutes: Number(ageMinutes.toFixed(1)),
                 fdc: data.fdc || null,
                 ftso: data.ftso || null,
                 validator: data.validator || null
               });
             } catch (error) {
-              return addCheck(CHECKS.watch, "down", `Watch status feed failed: ${error.message}`);
+              return addCheck(CHECKS.watch, "down", `Watch status feed failed: ${publicErrorText(error)}`);
             }
           }
 
@@ -241,7 +317,7 @@ jobs:
               await withRetries(() => fetchWithTimeout(base.url, 20_000), 2);
               return addCheck(base, "ok", "External reference feed is reachable.");
             } catch (error) {
-              return addCheck(base, "warn", `Non-critical external feed failed: ${error.message}`);
+              return addCheck(base, "warn", `Non-critical external feed failed: ${publicErrorText(error)}`);
             }
           }
 
@@ -264,12 +340,113 @@ jobs:
             return "All critical MirSFlr infra checks passed.";
           }
 
+          // BEGIN PUBLIC STATUS CONTRACT
+          // Validate without filtering, cloning or coercing: approved payloads
+          // retain every field and value. New fields block the entire publish
+          // until reviewed, instead of silently disappearing or becoming public.
+          // Includes historical v1 fields, not just today's status.json snapshot.
+          // Existing text is preserved verbatim; this is not a value redactor.
+          const publicObject = (fields, required = [], nullable = false) => ({
+            type: "object", fields, required, nullable
+          });
+          const publicArray = item => ({ type: "array", item, nullable: true });
+          const publicNumbers = names => Object.fromEntries(names.map(name => [name, "number|null"]));
+          const publicSeries = publicArray("number|null");
+          const publicFdc = publicObject({
+            status: "string",
+            ...publicNumbers(["availability", "availability6h", "availability24h", "participation",
+              "rewardedVotingRounds", "totalRewardedVotingRounds"]),
+            availabilityHourly24h: publicSeries,
+            conditionMet: "boolean|null"
+          }, [], true);
+          const publicFtso = publicObject({
+            status: "string",
+            ...publicNumbers(["latestCompletedEpoch", "signingPolicyEpoch", "weight", "delegatedWeight",
+              "cappedDelegatedWeight", "stakingWeight", "delegationFeeBips", "rewardRate", "performance",
+              "primaryPerformance", "secondaryPerformance", "availability", "availability6h", "availability24h"]),
+            availabilityHourly24h: publicSeries,
+            performanceHourly24h: publicSeries,
+            primaryPerformanceHourly24h: publicSeries,
+            secondaryPerformanceHourly24h: publicSeries
+          }, [], true);
+          const publicValidator = publicObject({
+            status: "string",
+            ...publicNumbers(["stake", "capacity", "fillPct", "free", "delegation", "selfBond", "delegationCount"]),
+            stakeEnd: "string|null",
+            topDelegations: publicArray(publicObject({
+              address: "string|null", amount: "number|null", start: "string|null", end: "string|null"
+            }))
+          }, [], true);
+          const publicCheck = publicObject({
+            id: "string", label: "string", kind: "string", status: "string", url: "string",
+            message: "string", checkedAt: "string", generatedAt: "string|null",
+            ...publicNumbers(["ageMinutes", "uptimePct", "delegations", "peers", "validatorReachPct"]),
+            fdc: publicFdc, ftso: publicFtso, validator: publicValidator
+          }, ["id", "label", "kind", "status", "url", "message", "checkedAt"]);
+          const publicStatusContract = publicObject({
+            schema: "string", generatedAt: "string", overall: "string", summary: "string",
+            monitor: publicObject({
+              name: "string", intervalMinutes: "number", statusPath: "string",
+              rawUrl: "string", pagesUrl: "string", workflow: "string"
+            }, ["name", "intervalMinutes", "statusPath", "workflow"]),
+            checks: { type: "array", item: publicCheck }
+          }, ["schema", "generatedAt", "overall", "summary", "monitor", "checks"]);
+
+          function assertPublicStatus(value, rule = publicStatusContract, path = "$") {
+            const blocked = reason => {
+              // Never include rejected keys or values: even a new key can
+              // contain confidential text. Only approved ancestor paths appear.
+              throw publicError(`Public status publication blocked: ${reason} at ${path}.`, "public-contract");
+            };
+            if (typeof rule === "string") {
+              const types = rule.split("|");
+              const type = value === null ? "null" : typeof value;
+              if (!types.includes(type) || (type === "number" && !Number.isFinite(value))) {
+                blocked("unexpected value type");
+              }
+              return;
+            }
+            if (value === null && rule.nullable) return;
+            // JSON.stringify must serialize the tree that was validated, not
+            // replace it through an own or inherited custom serializer.
+            if (value !== null && typeof value === "object" && "toJSON" in value) {
+              blocked("custom JSON serialization");
+            }
+            if (rule.type === "array") {
+              if (!Array.isArray(value)) blocked("expected array");
+              for (const key of Object.keys(value)) {
+                if (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length) {
+                  blocked("unapproved array field");
+                }
+              }
+              for (let index = 0; index < value.length; index += 1) {
+                assertPublicStatus(value[index], rule.item, `${path}[${index}]`);
+              }
+              return;
+            }
+            if (value === null || typeof value !== "object" || Array.isArray(value)
+                || Object.prototype.toString.call(value) !== "[object Object]") {
+              blocked("expected object");
+            }
+            for (const key of Object.keys(value)) {
+              if (!Object.hasOwn(rule.fields, key)) blocked("unapproved field");
+              assertPublicStatus(value[key], rule.fields[key], `${path}.${key}`);
+            }
+            for (const key of rule.required) {
+              if (!Object.hasOwn(value, key)) blocked("missing required field");
+            }
+          }
+          // END PUBLIC STATUS CONTRACT
+
           async function publishStatus(payload) {
+            monitorPhase = "public-contract";
+            assertPublicStatus(payload);
+            assertPublicUrls(payload);
+            monitorPhase = "publication";
             const token = process.env.GITHUB_TOKEN;
             const repo = process.env.GITHUB_REPOSITORY;
             if (!token || !repo) {
-              console.log("Skipping publish outside GitHub Actions.");
-              return;
+              throw publicError("Status publication requires a token and repository context.", "publication");
             }
 
             const apiUrl = `https://api.github.com/repos/${repo}/contents/${STATUS_PATH}`;
@@ -287,7 +464,7 @@ jobs:
               const json = await existing.json();
               sha = json.sha || null;
             } else if (existing.status !== 404) {
-              throw new Error(`Could not read existing status JSON: HTTP ${existing.status}`);
+              throw publicError(`Could not read existing status JSON: HTTP ${publicHttpStatus(existing.status)}`, "publication");
             }
 
             const content = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8").toString("base64");
@@ -302,8 +479,7 @@ jobs:
               })
             });
             if (!response.ok) {
-              const body = await response.text();
-              throw new Error(`Could not publish status JSON: HTTP ${response.status} ${body.slice(0, 240)}`);
+              throw publicError(`Could not publish status JSON: HTTP ${publicHttpStatus(response.status)}`, "publication");
             }
             console.log(`Published ${STATUS_PATH}`);
           }
@@ -340,8 +516,10 @@ jobs:
 
             if (overall === "down") process.exit(1);
           })().catch(error => {
-            annotation("error", "Infra Health CI", error.message);
-            console.error(error);
+            const message = publicErrorText(error);
+            const category = publicErrors.get(error)?.category || monitorPhase;
+            annotation("error", "Infra Health CI", message);
+            console.error(`[${category}] ${message}`);
             process.exit(1);
           });
           NODE
